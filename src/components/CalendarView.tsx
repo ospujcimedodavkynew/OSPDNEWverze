@@ -7,7 +7,6 @@ const CalendarView: React.FC = () => {
 
     // A simple list view grouped by date for demonstration
     const rentalsByDate: { [key: string]: typeof rentals } = rentals.reduce((acc, rental) => {
-        // FIX: Property 'startDate' does not exist on type 'Rental'. Used 'start_date' instead.
         const date = new Date(rental.start_date).toLocaleDateString();
         if (!acc[date]) {
             acc[date] = [];
@@ -16,7 +15,6 @@ const CalendarView: React.FC = () => {
         return acc;
     }, {} as { [key: string]: typeof rentals });
 
-    // FIX: Changed vehicleId type from string to number to match Vehicle.id type and avoid comparison error.
     const getVehicleName = (vehicleId: number) => {
         return vehicles.find(v => v.id === vehicleId)?.brand ?? 'Neznámé';
     }
@@ -31,10 +29,8 @@ const CalendarView: React.FC = () => {
                         <ul>
                             {rentalsByDate[date].map(rental => (
                                 <li key={rental.id} className="p-2 rounded hover:bg-background">
-                                    {/* FIX: Property 'vehicleId' does not exist on type 'Rental'. Used 'vehicle_id' instead. */}
                                     <p className="font-bold">{getVehicleName(rental.vehicle_id)}</p>
                                     <p className="text-sm text-text-secondary">
-                                        {/* FIX: Properties 'startDate' and 'endDate' do not exist on type 'Rental'. Used 'start_date' and 'end_date' instead. */}
                                         Od: {new Date(rental.start_date).toLocaleTimeString()} Do: {new Date(rental.end_date).toLocaleTimeString()}
                                     </p>
                                 </li>

@@ -76,8 +76,7 @@ const Fleet: React.FC = () => {
         handleCloseModal();
     };
     
-    // FIX: Changed id type from number to string to match Vehicle.id type.
-    const handleDelete = (id: string) => {
+    const handleDelete = (id: number) => {
         if (window.confirm("Opravdu chcete smazat toto vozidlo?")) {
             deleteVehicle(id);
             addToast("Vozidlo bylo smazáno.", "info");

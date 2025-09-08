@@ -64,8 +64,7 @@ const Customers: React.FC = () => {
         handleCloseModal();
     };
 
-    // FIX: Changed id type from number to string to match Customer.id type.
-    const handleDelete = (id: string) => {
+    const handleDelete = (id: number) => {
         if (window.confirm("Opravdu chcete smazat tohoto zákazníka? Všechny jeho zápůjčky zůstanou v systému.")) {
             deleteCustomer(id);
             addToast("Zákazník byl smazán.", "info");

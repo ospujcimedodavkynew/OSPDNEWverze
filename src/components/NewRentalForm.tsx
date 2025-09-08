@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useData } from '../context/DataContext';
 import { useNavigate } from 'react-router-dom';
 import { Card, Button, Input, Label } from './ui';
-import { Vehicle, Customer } from '../types';
 
 const NewRentalForm: React.FC = () => {
     const { vehicles, customers, addRental, addToast } = useData();
@@ -15,7 +14,7 @@ const NewRentalForm: React.FC = () => {
     const [totalPrice, setTotalPrice] = useState(0);
 
     const calculatePrice = () => {
-        const vehicle = vehicles.find(v => v.id === selectedVehicleId);
+        const vehicle = vehicles.find(v => v.id === parseInt(selectedVehicleId, 10));
         if (!vehicle || !startDate || !endDate) {
             setTotalPrice(0);
             return;
@@ -47,8 +46,8 @@ const NewRentalForm: React.FC = () => {
         }
         
         const newRental = {
-            vehicle_id: selectedVehicleId,
-            customer_id: selectedCustomerId,
+            vehicle_id: parseInt(selectedVehicleId, 10),
+            customer_id: parseInt(selectedCustomerId, 10),
             start_date: new Date(startDate).toISOString(),
             end_date: new Date(endDate).toISOString(),
             total_price: totalPrice,

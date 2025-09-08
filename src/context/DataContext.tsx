@@ -16,15 +16,15 @@ interface DataContextProps {
     login: (email: string, pass: string) => Promise<boolean>;
     logout: () => void;
     addVehicle: (vehicle: Omit<Vehicle, 'id' | 'created_at'>) => Promise<Vehicle | null>;
-    updateVehicle: (id: string, updates: Partial<Omit<Vehicle, 'id' | 'created_at'>>) => Promise<Vehicle | null>;
-    deleteVehicle: (id: string) => Promise<boolean>;
+    updateVehicle: (id: number, updates: Partial<Omit<Vehicle, 'id' | 'created_at'>>) => Promise<Vehicle | null>;
+    deleteVehicle: (id: number) => Promise<boolean>;
     addCustomer: (customer: Omit<Customer, 'id' | 'created_at'>) => Promise<Customer | null>;
-    updateCustomer: (id: string, updates: Partial<Omit<Customer, 'id' | 'created_at'>>) => Promise<Customer | null>;
-    deleteCustomer: (id: string) => Promise<boolean>;
+    updateCustomer: (id: number, updates: Partial<Omit<Customer, 'id' | 'created_at'>>) => Promise<Customer | null>;
+    deleteCustomer: (id: number) => Promise<boolean>;
     addRental: (rental: Omit<Rental, 'id' | 'created_at'>) => Promise<Rental | null>;
-    updateRentalSignatures: (id: string, signatures: { customer_signature?: string, company_signature?: string }) => Promise<Rental | null>;
+    updateRentalSignatures: (id: number, signatures: { customer_signature?: string, company_signature?: string }) => Promise<Rental | null>;
     addRentalRequest: (request: Omit<RentalRequest, 'id'>) => Promise<RentalRequest | null>;
-    updateRentalRequestStatus: (id: string, status: 'approved' | 'rejected') => Promise<boolean>;
+    updateRentalRequestStatus: (id: number, status: 'approved' | 'rejected') => Promise<boolean>;
     addToast: (message: string, type: 'success' | 'error' | 'info') => void;
 }
 
@@ -114,13 +114,13 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (data) setVehicles(prev => [...prev, data as any]);
         return data as any;
     };
-    const updateVehicle = async (id: string, updates: Partial<Omit<Vehicle, 'id' | 'created_at'>>) => {
+    const updateVehicle = async (id: number, updates: Partial<Omit<Vehicle, 'id' | 'created_at'>>) => {
         const { data, error } = await supabase.from('vehicles').update(updates).eq('id', id).select().single();
         if (error) { addToast(error.message, 'error'); return null; }
         if (data) setVehicles(prev => prev.map(v => v.id === id ? data as any : v));
         return data as any;
     };
-    const deleteVehicle = async (id: string) => {
+    const deleteVehicle = async (id: number) => {
         const { error } = await supabase.from('vehicles').delete().eq('id', id);
         if (error) { addToast(error.message, 'error'); return false; }
         setVehicles(prev => prev.filter(v => v.id !== id));
@@ -134,13 +134,13 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (data) setCustomers(prev => [...prev, data as any]);
         return data as any;
     };
-    const updateCustomer = async (id: string, updates: Partial<Omit<Customer, 'id' | 'created_at'>>) => {
+    const updateCustomer = async (id: number, updates: Partial<Omit<Customer, 'id' | 'created_at'>>) => {
         const { data, error } = await supabase.from('customers').update(updates).eq('id', id).select().single();
         if (error) { addToast(error.message, 'error'); return null; }
         if (data) setCustomers(prev => prev.map(c => c.id === id ? data as any : c));
         return data as any;
     };
-    const deleteCustomer = async (id: string) => {
+    const deleteCustomer = async (id: number) => {
         const { error } = await supabase.from('customers').delete().eq('id', id);
         if (error) { addToast(error.message, 'error'); return false; }
         setCustomers(prev => prev.filter(c => c.id !== id));
@@ -154,7 +154,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (data) setRentals(prev => [...prev, data as any]);
         return data as any;
     };
-    const updateRentalSignatures = async (id: string, signatures: { customer_signature?: string, company_signature?: string }) => {
+    const updateRentalSignatures = async (id: number, signatures: { customer_signature?: string, company_signature?: string }) => {
         const { data, error } = await supabase.from('rentals').update({ ...signatures, digital_consent_at: new Date().toISOString() }).eq('id', id).select().single();
         if (error) { addToast(error.message, 'error'); return null; }
         if (data) setRentals(prev => prev.map(r => r.id === id ? data as any : r));
@@ -168,7 +168,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if(data) setRentalRequests(prev => [...prev, data as any]);
         return data as any;
     };
-    const updateRentalRequestStatus = async (id: string, status: 'approved' | 'rejected') => {
+    const updateRentalRequestStatus = async (id: number, status: 'approved' | 'rejected') => {
         const { error } = await supabase.from('rental_requests').update({ status }).eq('id', id);
         if (error) { addToast(error.message, 'error'); return false; }
         setRentalRequests(prev => prev.map(req => req.id === id ? { ...req, status } : req));

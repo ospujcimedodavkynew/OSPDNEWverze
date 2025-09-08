@@ -17,11 +17,14 @@ const ContractView: React.FC = () => {
     const [isSigningCompany, setIsSigningCompany] = useState(false);
 
     useEffect(() => {
-        const currentRental = rentals.find(r => r.id === id);
-        if (currentRental) {
-            setRental(currentRental);
-            setVehicle(vehicles.find(v => v.id === currentRental.vehicle_id) || null);
-            setCustomer(customers.find(c => c.id === currentRental.customer_id) || null);
+        if (id) {
+            const rentalId = parseInt(id, 10);
+            const currentRental = rentals.find(r => r.id === rentalId);
+            if (currentRental) {
+                setRental(currentRental);
+                setVehicle(vehicles.find(v => v.id === currentRental.vehicle_id) || null);
+                setCustomer(customers.find(c => c.id === currentRental.customer_id) || null);
+            }
         }
     }, [id, rentals, vehicles, customers]);
 
@@ -52,7 +55,7 @@ const ContractView: React.FC = () => {
     return (
         <div>
             <div className="flex justify-between items-center mb-6">
-                <h1 className="text-3xl font-bold">Smlouva o zápůjčce #{rental.id.substring(0, 8)}</h1>
+                <h1 className="text-3xl font-bold">Smlouva o zápůjčce #{rental.id}</h1>
                 <Button onClick={() => window.print()} variant="secondary">Tisk</Button>
             </div>
             

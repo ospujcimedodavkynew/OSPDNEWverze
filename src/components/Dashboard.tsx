@@ -21,17 +21,14 @@ const Dashboard: React.FC = () => {
     const pendingRequests = rentalRequests.filter(r => r.status === 'pending');
     
     const upcomingReturns = activeRentals.filter(r => {
-        // FIX: Property 'endDate' does not exist on type 'Rental'. Used 'end_date' instead.
         const endDate = new Date(r.end_date);
         const today = new Date();
         const nextWeek = new Date(today);
         nextWeek.setDate(today.getDate() + 7);
         return endDate >= today && endDate <= nextWeek;
-        // FIX: Property 'endDate' does not exist on type 'Rental'. Used 'end_date' instead.
     }).sort((a,b) => new Date(a.end_date).getTime() - new Date(b.end_date).getTime());
 
     const handleApprove = async (request: RentalRequest) => {
-        // FIX: Corrected type to Omit<Customer, 'id' | 'created_at'> to match `addCustomer` function signature.
         const newCustomer: Omit<Customer, 'id' | 'created_at'> = {
             first_name: request.first_name,
             last_name: request.last_name,
@@ -98,13 +95,10 @@ const Dashboard: React.FC = () => {
                         <ul className="divide-y divide-border">
                             {upcomingReturns.map(r => (
                                 <li key={r.id} className="p-4 hover:bg-background">
-                                    {/* FIX: Property 'vehicleId' does not exist on type 'Rental'. Used 'vehicle_id' instead. */}
                                     <p className="font-semibold">{vehicles.find(v => v.id === r.vehicle_id)?.brand}</p>
                                     <p className="text-sm text-text-secondary">
-                                        {/* FIX: Property 'customerId' does not exist on type 'Rental'. Used 'customer_id' instead. */}
                                         Zákazník: {customers.find(c => c.id === r.customer_id)?.first_name} {customers.find(c => c.id === r.customer_id)?.last_name}
                                     </p>
-                                     {/* FIX: Property 'endDate' does not exist on type 'Rental'. Used 'end_date' instead. */}
                                      <p className="text-sm font-medium">Vrátit do: {new Date(r.end_date).toLocaleString()}</p>
                                 </li>
                             ))}

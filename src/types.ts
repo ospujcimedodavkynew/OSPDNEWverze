@@ -1,14 +1,14 @@
 
 
 export interface ServiceRecord {
-  id: string;
+  id: number;
   date: string;
   description: string;
   cost: number;
 }
 
 export interface Vehicle {
-  id: string;
+  id: number;
   brand: string;
   license_plate: string;
   vin: string;
@@ -27,7 +27,7 @@ export interface Vehicle {
 }
 
 export interface Customer {
-  id: string;
+  id: number;
   first_name: string;
   last_name: string;
   email: string;
@@ -39,9 +39,9 @@ export interface Customer {
 }
 
 export interface Rental {
-  id: string;
-  vehicle_id: string;
-  customer_id: string;
+  id: number;
+  vehicle_id: number;
+  customer_id: number;
   start_date: string;
   end_date: string;
   total_price: number;
@@ -53,7 +53,7 @@ export interface Rental {
 }
 
 export interface RentalRequest {
-    id: string;
+    id: number;
     first_name: string;
     last_name: string;
     email: string;
