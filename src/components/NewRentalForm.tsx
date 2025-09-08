@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '../context/DataContext';
 import { Card, Button, Input, Label } from './ui';
-import { Customer, Vehicle, Rental } from '../types';
+import { Rental } from '../types';
 import ContractView from './ContractView';
 import { useNavigate } from 'react-router-dom';
 
