@@ -1,8 +1,9 @@
 
+
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
-import { Vehicle, Customer } from '../types';
+import { Customer } from '../types';
 import { Card, Button, Input, Label, Select, Stepper, Tabs } from './ui';
 import ContractView from './ContractView';
 
