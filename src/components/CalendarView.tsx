@@ -38,6 +38,7 @@ const CalendarView: React.FC = () => {
                         </ul>
                     </div>
                 ))}
+                 {rentals.length === 0 && <p>Zatím nebyly vytvořeny žádné zápůjčky.</p>}
             </Card>
         </div>
     );

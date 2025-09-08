@@ -31,7 +31,7 @@ const Rentals: React.FC = () => {
         const vehicleName = getVehicleName(rental.vehicle_id).toLowerCase();
         const term = searchTerm.toLowerCase();
         return customerName.includes(term) || vehicleName.includes(term);
-    });
+    }).sort((a,b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime());
 
     return (
         <div>
@@ -86,6 +86,7 @@ const Rentals: React.FC = () => {
                             ))}
                         </tbody>
                     </table>
+                     {filteredRentals.length === 0 && <p className="p-4 text-center">Nebyly nalezeny žádné zápůjčky.</p>}
                 </div>
             </Card>
         </div>
