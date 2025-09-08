@@ -1,331 +1,228 @@
+
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
-import { Button, Card, Input, Label, Stepper, Tabs, SecondaryButton } from './ui';
-import { Customer, Rental, Vehicle } from '../types';
-import SignaturePad from './SignaturePad';
+import { Vehicle, Customer } from '../types';
+import { Card, Button, Input, Label, Select, Stepper, Tabs } from './ui';
 import ContractView from './ContractView';
 
-type Step = 'date' | 'vehicle' | 'customer' | 'contract' | 'confirm';
+type NewCustomerData = Omit<Customer, 'id' | 'created_at'>;
 
-const CreateRentalWizard: React.FC = () => {
+const NewRentalForm: React.FC = () => {
+    const { vehicles, customers, addCustomer, addRental, addToast } = useData();
     const navigate = useNavigate();
-    const { vehicles, customers, rentals, addRental, addCustomer, addToast, sendContractByEmail } = useData();
 
-    const [currentStep, setCurrentStep] = useState<Step>('date');
-    const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 16));
+    const [currentStep, setCurrentStep] = useState(0);
+    const [selectedVehicleId, setSelectedVehicleId] = useState<string>('');
+    const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
+    const [customerTab, setCustomerTab] = useState('existing'); // 'existing' or 'new'
+    
+    const initialNewCustomerState: NewCustomerData = {
+        first_name: '',
+        last_name: '',
+        email: '',
+        phone: '',
+        id_card_number: '',
+        drivers_license_number: '',
+    };
+    const [newCustomer, setNewCustomer] = useState<NewCustomerData>(initialNewCustomerState);
+
+    const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
-    const [duration, setDuration] = useState<{ type: string; value: number }>({ type: 'day', value: 1 });
-
-    const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
-    const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+    const [totalPrice, setTotalPrice] = useState(0);
     
-    const [customerSignature, setCustomerSignature] = useState<string | null>(null);
-    const [companySignature, setCompanySignature] = useState<string | null>(null);
-
-    const [newRental, setNewRental] = useState<Rental | null>(null);
-
-    const availableVehicles = useMemo(() => {
-        if (!startDate || !endDate) return [];
-        const start = new Date(startDate).getTime();
-        const end = new Date(endDate).getTime();
-
-        return vehicles.filter(vehicle => {
-            return !rentals.some(rental => {
-                if (rental.vehicle_id !== vehicle.id) return false;
-                const rentalStart = new Date(rental.start_date).getTime();
-                const rentalEnd = new Date(rental.end_date).getTime();
-                return Math.max(start, rentalStart) < Math.min(end, rentalEnd);
-            });
-        });
-    }, [startDate, endDate, vehicles, rentals]);
-
-     const totalPrice = useMemo(() => {
-        if (!selectedVehicle || !duration.value) return 0;
-        const pricing = selectedVehicle.pricing;
-        if (duration.type === 'hour_4' && pricing.four_hour) return pricing.four_hour;
-        if (duration.type === 'hour_12' && pricing.twelve_hour) return pricing.twelve_hour;
-        if (duration.type === 'day' && pricing.day) return duration.value * pricing.day;
-        if (duration.type === 'month' && pricing.month) return pricing.month;
-        return 0;
-    }, [selectedVehicle, duration]);
-
-    const handleDateSubmit = (sDate: string, eDate: string) => {
-        setStartDate(sDate);
-        setEndDate(eDate);
-        setCurrentStep('vehicle');
-    };
+    const selectedVehicle = useMemo(() => vehicles.find(v => v.id === Number(selectedVehicleId)), [vehicles, selectedVehicleId]);
+    const selectedCustomer = useMemo(() => customers.find(c => c.id === Number(selectedCustomerId)), [customers, selectedCustomerId]);
     
-    const handleVehicleSelect = (vehicle: Vehicle) => {
-        setSelectedVehicle(vehicle);
-        setCurrentStep('customer');
-    };
+    const steps = ['Vozidlo', 'Zákazník', 'Termín & Cena', 'Shrnutí'];
 
-    const handleCustomerSelect = (customer: Customer) => {
-        setSelectedCustomer(customer);
-        setCurrentStep('contract');
-    }
-
-    const handleContractSubmit = async () => {
-        if (!selectedVehicle || !selectedCustomer || !startDate || !endDate || !customerSignature) {
-            addToast("Chybí povinné údaje nebo podpis nájemce.", "error");
+    const handleNext = () => {
+        // Validation for each step
+        if (currentStep === 0 && !selectedVehicle) {
+            addToast('Prosím, vyberte vozidlo.', 'error');
             return;
         }
+        if (currentStep === 1) {
+            if (customerTab === 'existing' && !selectedCustomer) {
+                 addToast('Prosím, vyberte zákazníka.', 'error');
+                 return;
+            }
+            if (customerTab === 'new' && (!newCustomer.first_name || !newCustomer.last_name || !newCustomer.email)) {
+                 addToast('Prosím, vyplňte jméno, příjmení a email nového zákazníka.', 'error');
+                 return;
+            }
+        }
+        if (currentStep === 2) {
+            if (!startDate || !endDate) {
+                 addToast('Prosím, vyberte datum a čas začátku i konce.', 'error');
+                 return;
+            }
+            if (new Date(startDate) >= new Date(endDate)) {
+                 addToast('Datum konce musí být po datu začátku.', 'error');
+                 return;
+            }
+             calculatePrice();
+        }
+        setCurrentStep(s => s + 1);
+    };
+    
+    const handleBack = () => setCurrentStep(s => s - 1);
 
-        const rentalData: Omit<Rental, 'id'> = {
+    const calculatePrice = () => {
+        if (!selectedVehicle || !startDate || !endDate) {
+            setTotalPrice(0);
+            return;
+        }
+        const start = new Date(startDate).getTime();
+        const end = new Date(endDate).getTime();
+        const hours = Math.ceil((end - start) / (1000 * 60 * 60));
+        
+        let price = 0;
+        const dailyRate = selectedVehicle.pricing?.day;
+
+        if (dailyRate) {
+             const days = Math.ceil(hours / 24);
+             price = days * dailyRate;
+        } else {
+            // Fallback or more complex logic can be added here
+            price = hours * (selectedVehicle.pricing?.four_hour || 50); // a sample fallback
+        }
+        setTotalPrice(price);
+    };
+    
+    const handleSubmit = async () => {
+        let finalCustomerId: number | undefined = selectedCustomer?.id;
+
+        if (customerTab === 'new') {
+            const createdCustomer = await addCustomer(newCustomer);
+            if (!createdCustomer) {
+                addToast('Nepodařilo se vytvořit nového zákazníka.', 'error');
+                return;
+            }
+            finalCustomerId = createdCustomer.id;
+        }
+        
+        if (!selectedVehicle || !finalCustomerId || !startDate || !endDate || totalPrice <= 0) {
+            addToast('Chybí potřebné údaje pro vytvoření zápůjčky.', 'error');
+            return;
+        }
+        
+        const newRentalData = {
             vehicle_id: selectedVehicle.id,
-            customer_id: selectedCustomer.id,
+            customer_id: finalCustomerId,
             start_date: new Date(startDate).toISOString(),
             end_date: new Date(endDate).toISOString(),
             total_price: totalPrice,
-            status: 'active',
-            customer_signature: customerSignature,
-            company_signature: companySignature,
-            digital_consent_at: new Date().toISOString(),
+            status: 'pending' as const,
         };
 
-        const createdRental = await addRental(rentalData);
-        if (createdRental) {
-            setNewRental(createdRental);
-            addToast("Zápůjčka byla úspěšně vytvořena.", "success");
-            await sendContractByEmail(createdRental.id);
-            setCurrentStep('confirm');
-        } else {
-             addToast("Nepodařilo se vytvořit zápůjčku.", "error");
-        }
-    };
+        const result = await addRental(newRentalData);
 
-
-    const renderStep = () => {
-        switch (currentStep) {
-            case 'date':
-                return <DateStep onSubmit={handleDateSubmit} setDuration={setDuration} duration={duration} startDate={startDate} setStartDate={setStartDate} />;
-            case 'vehicle':
-                return <VehicleStep 
-                            availableVehicles={availableVehicles} 
-                            allVehicles={vehicles} 
-                            onSelect={handleVehicleSelect} 
-                            onBack={() => setCurrentStep('date')} 
-                        />;
-            case 'customer':
-                return <CustomerStep 
-                            customers={customers} 
-                            onSelect={handleCustomerSelect} 
-                            addCustomer={addCustomer}
-                            onBack={() => setCurrentStep('vehicle')}
-                            addToast={addToast}
-                        />;
-            case 'contract':
-                // FIX: Corrected type to use snake_case 'total_price' to match the Rental type and object literal.
-                const previewRental: Partial<Rental> & {total_price: number} = {
-                    start_date: startDate, end_date: endDate, total_price: totalPrice,
-                }
-                return <ContractStep 
-                            rental={previewRental}
-                            vehicle={selectedVehicle}
-                            customer={selectedCustomer}
-                            onBack={() => setCurrentStep('customer')}
-                            onSubmit={handleContractSubmit}
-                            setCustomerSignature={setCustomerSignature}
-                            setCompanySignature={setCompanySignature}
-                        />;
-            case 'confirm':
-                return <ConfirmationStep rentalId={newRental?.id} />;
-            default:
-                return null;
+        if (result) {
+            addToast('Nová zápůjčka byla úspěšně vytvořena.', 'success');
+            navigate(`/rentals/contract/${result.id}`);
         }
     };
 
     return (
         <div>
             <h1 className="text-3xl font-bold mb-6">Nová zápůjčka</h1>
-            <Stepper
-                currentStep={['date', 'vehicle', 'customer', 'contract', 'confirm'].indexOf(currentStep)}
-                steps={['Termín', 'Vozidlo', 'Zákazník', 'Smlouva', 'Hotovo']}
-            />
-            <div className="mt-8">{renderStep()}</div>
-        </div>
-    );
-};
+            <Card className="mb-6">
+                <Stepper steps={steps} currentStep={currentStep} />
+            </Card>
 
-// --- Child Components for Steps ---
+            {/* Step 1: Vehicle Selection */}
+            {currentStep === 0 && (
+                <Card>
+                    <h2 className="text-xl font-bold mb-4">Krok 1: Vyberte vozidlo</h2>
+                    <Label htmlFor="vehicle">Vozidlo</Label>
+                    <Select id="vehicle" value={selectedVehicleId} onChange={e => setSelectedVehicleId(e.target.value)}>
+                        <option value="">-- Vyberte vozidlo --</option>
+                        {vehicles.map(v => <option key={v.id} value={v.id}>{v.brand} - {v.license_plate}</option>)}
+                    </Select>
+                </Card>
+            )}
+            
+            {/* Step 2: Customer Selection */}
+            {currentStep === 1 && (
+                <Card>
+                     <h2 className="text-xl font-bold mb-4">Krok 2: Vyberte zákazníka</h2>
+                     <Tabs 
+                        tabs={[{id: 'existing', label: 'Existující zákazník'}, {id: 'new', label: 'Nový zákazník'}]}
+                        activeTab={customerTab}
+                        setActiveTab={setCustomerTab}
+                     />
+                     <div className="mt-4">
+                        {customerTab === 'existing' && (
+                            <div>
+                                <Label htmlFor="customer">Zákazník</Label>
+                                <Select id="customer" value={selectedCustomerId} onChange={e => setSelectedCustomerId(e.target.value)}>
+                                     <option value="">-- Vyberte zákazníka --</option>
+                                     {customers.map(c => <option key={c.id} value={c.id}>{c.first_name} {c.last_name} ({c.email})</option>)}
+                                </Select>
+                            </div>
+                        )}
+                        {customerTab === 'new' && (
+                            <div className="space-y-4">
+                                <Input name="first_name" placeholder="Jméno" value={newCustomer.first_name} onChange={e => setNewCustomer(p => ({...p, first_name: e.target.value}))} />
+                                <Input name="last_name" placeholder="Příjmení" value={newCustomer.last_name} onChange={e => setNewCustomer(p => ({...p, last_name: e.target.value}))} />
+                                <Input name="email" type="email" placeholder="Email" value={newCustomer.email} onChange={e => setNewCustomer(p => ({...p, email: e.target.value}))} />
+                                <Input name="phone" placeholder="Telefon" value={newCustomer.phone} onChange={e => setNewCustomer(p => ({...p, phone: e.target.value}))} />
+                                <Input name="id_card_number" placeholder="Číslo OP" value={newCustomer.id_card_number} onChange={e => setNewCustomer(p => ({...p, id_card_number: e.target.value}))} />
+                                <Input name="drivers_license_number" placeholder="Číslo ŘP" value={newCustomer.drivers_license_number} onChange={e => setNewCustomer(p => ({...p, drivers_license_number: e.target.value}))} />
+                            </div>
+                        )}
+                     </div>
+                </Card>
+            )}
 
-const DateStep = ({ onSubmit, setDuration, duration, startDate, setStartDate }: { onSubmit: (start: string, end: string) => void, setDuration: any, duration: any, startDate: string, setStartDate: (date: string) => void }) => {
-    const [numDays, setNumDays] = useState(1);
-
-    const calculateEnd = () => {
-        const sDate = new Date(startDate);
-        if(!sDate.getTime()) return '';
-        if (duration.type === 'hour_4') return new Date(sDate.getTime() + 4 * 60 * 60 * 1000).toISOString().slice(0,16);
-        if (duration.type === 'hour_12') return new Date(sDate.getTime() + 12 * 60 * 60 * 1000).toISOString().slice(0,16);
-        if (duration.type === 'day') return new Date(sDate.getTime() + numDays * 24 * 60 * 60 * 1000).toISOString().slice(0,16);
-        if (duration.type === 'month') return new Date(sDate.setMonth(sDate.getMonth() + 1)).toISOString().slice(0,16);
-        return '';
-    };
-
-    const handleDurationChange = (type: string) => {
-        const value = type === 'day' ? numDays : 1;
-        setDuration({ type, value });
-    }
-
-    const isFormValid = startDate && calculateEnd();
-
-    return (
-        <Card>
-            <div className="space-y-4">
-                <div>
-                    <Label>Začátek pronájmu</Label>
-                    <Input type="datetime-local" value={startDate} onChange={e => setStartDate(e.target.value)} />
-                </div>
-                <div>
-                    <Label>Délka pronájmu</Label>
-                    <div className="flex space-x-2 mt-1">
-                        <Button onClick={() => handleDurationChange('hour_4')} variant={duration.type === 'hour_4' ? 'primary' : 'secondary'}>4 hodiny</Button>
-                        <Button onClick={() => handleDurationChange('hour_12')} variant={duration.type === 'hour_12' ? 'primary' : 'secondary'}>12 hodin</Button>
-                        <Button onClick={() => handleDurationChange('day')} variant={duration.type === 'day' ? 'primary' : 'secondary'}>Na dny</Button>
-                        <Button onClick={() => handleDurationChange('month')} variant={duration.type === 'month' ? 'primary' : 'secondary'}>Měsíc</Button>
-                    </div>
-                </div>
-                {duration.type === 'day' && (
-                    <div>
-                        <Label>Počet dní (1-29)</Label>
-                        <Input type="number" min="1" max="29" value={numDays} onChange={e => setNumDays(parseInt(e.target.value) || 1)} />
-                    </div>
-                )}
-                <div className="pt-4 text-lg font-semibold">
-                    <p>Konec pronájmu: {isFormValid ? new Date(calculateEnd()).toLocaleString() : '...'}</p>
-                </div>
-                <div className="flex justify-end">
-                    <Button onClick={() => onSubmit(startDate, calculateEnd())} disabled={!isFormValid}>Vyhledat vozidla</Button>
-                </div>
-            </div>
-        </Card>
-    );
-};
-
-const VehicleStep = ({ availableVehicles, allVehicles, onSelect, onBack }: { availableVehicles: Vehicle[], allVehicles: Vehicle[], onSelect: (v: Vehicle) => void, onBack: () => void }) => {
-    return (
-         <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {allVehicles.map(vehicle => {
-                    const isAvailable = availableVehicles.some(av => av.id === vehicle.id);
-                    return (
-                        <Card 
-                            key={vehicle.id}
-                            onClick={isAvailable ? () => onSelect(vehicle) : undefined}
-                            className={`transition-all ${isAvailable ? 'cursor-pointer hover:shadow-xl hover:border-primary' : 'opacity-50 bg-background'}`}
-                        >
-                            <h3 className="font-bold text-lg">{vehicle.brand}</h3>
-                            <p className="text-text-secondary">{vehicle.license_plate}</p>
-                            {!isAvailable && <p className="text-red-500 font-bold mt-2">V tomto termínu obsazeno</p>}
-                        </Card>
-                    );
-                })}
-            </div>
-            <div className="flex justify-start">
-                 <SecondaryButton onClick={onBack}>Zpět</SecondaryButton>
-            </div>
-        </div>
-    );
-};
-
-const CustomerStep = ({ customers, onSelect, addCustomer, onBack, addToast }: { customers: Customer[], onSelect: (c: Customer) => void, addCustomer: (c: Omit<Customer, 'id'|'created_at'>) => Promise<Customer|null>, onBack: () => void, addToast: (message: string, type: 'success' | 'error' | 'info') => void }) => {
-    const [activeTab, setActiveTab] = useState('existing');
-    const [searchTerm, setSearchTerm] = useState('');
-    const [formState, setFormState] = useState({ first_name: '', last_name: '', email: '', phone: '', id_card_number: '', drivers_license_number: '' });
-
-    const filteredCustomers = customers.filter(c =>
-        `${c.first_name} ${c.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.email.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-
-    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setFormState({ ...formState, [e.target.name]: e.target.value });
-    };
-
-    const handleCreateCustomer = async () => {
-        const newCustomer = await addCustomer(formState);
-        if (newCustomer) {
-            addToast("Zákazník úspěšně vytvořen", "success");
-            onSelect(newCustomer);
-        }
-    };
-
-    return (
-        <Card>
-            <Tabs tabs={[{id: 'existing', label: 'Existující zákazník'}, {id: 'new', label: 'Nový zákazník'}]} activeTab={activeTab} setActiveTab={setActiveTab} />
-            <div className="mt-4">
-                {activeTab === 'existing' ? (
-                    <div>
-                        <Input placeholder="Hledat zákazníka (jméno, email)..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-                        <ul className="mt-4 max-h-64 overflow-y-auto divide-y divide-border border rounded-md">
-                            {filteredCustomers.map(c => <li key={c.id} onClick={() => onSelect(c)} className="p-3 hover:bg-background cursor-pointer">{c.first_name} {c.last_name} ({c.email})</li>)}
-                             {filteredCustomers.length === 0 && <li className="p-3 text-center text-text-secondary">Žádný zákazník nenalezen.</li>}
-                        </ul>
-                    </div>
-                ) : (
-                    <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
-                            <Input name="first_name" placeholder="Jméno" value={formState.first_name} onChange={handleInputChange} />
-                            <Input name="last_name" placeholder="Příjmení" value={formState.last_name} onChange={handleInputChange} />
+            {/* Step 3: Date & Price */}
+            {currentStep === 2 && (
+                <Card>
+                    <h2 className="text-xl font-bold mb-4">Krok 3: Zvolte termín a spočítejte cenu</h2>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <Label htmlFor="start_date">Začátek zápůjčky</Label>
+                            <Input id="start_date" type="datetime-local" value={startDate} onChange={e => setStartDate(e.target.value)} />
                         </div>
-                        <Input name="email" type="email" placeholder="Email" value={formState.email} onChange={handleInputChange} />
-                        <Input name="phone" placeholder="Telefon" value={formState.phone} onChange={handleInputChange} />
-                        <Input name="id_card_number" placeholder="Číslo OP" value={formState.id_card_number} onChange={handleInputChange} />
-                        <Input name="drivers_license_number" placeholder="Číslo ŘP" value={formState.drivers_license_number} onChange={handleInputChange} />
-                        <Button onClick={handleCreateCustomer}>Vytvořit a vybrat zákazníka</Button>
+                        <div>
+                            <Label htmlFor="end_date">Konec zápůjčky</Label>
+                            <Input id="end_date" type="datetime-local" value={endDate} onChange={e => setEndDate(e.target.value)} />
+                        </div>
                     </div>
-                )}
+                    <div className="mt-4">
+                         <Button onClick={calculatePrice}>Spočítat cenu</Button>
+                         {totalPrice > 0 && <p className="mt-4 text-lg font-bold">Celková cena: {totalPrice} Kč</p>}
+                    </div>
+                </Card>
+            )}
+
+            {/* Step 4: Summary */}
+            {currentStep === 3 && (
+                <Card>
+                     <h2 className="text-xl font-bold mb-4">Krok 4: Shrnutí a vytvoření smlouvy</h2>
+                     <ContractView 
+                        previewRental={{
+                            start_date: startDate,
+                            end_date: endDate,
+                            total_price: totalPrice,
+                            status: 'pending'
+                        }}
+                        vehicle={selectedVehicle}
+                        customer={customerTab === 'new' ? { ...newCustomer, id: 0, created_at: '' } : selectedCustomer}
+                     />
+                </Card>
+            )}
+
+            {/* Navigation Buttons */}
+            <div className="mt-6 flex justify-between">
+                {currentStep > 0 && <Button onClick={handleBack} variant="secondary">Zpět</Button>}
+                <div />
+                {currentStep < steps.length - 1 && <Button onClick={handleNext}>Další</Button>}
+                {currentStep === steps.length - 1 && <Button onClick={handleSubmit}>Vytvořit zápůjčku</Button>}
             </div>
-             <div className="flex justify-start mt-4">
-                 <SecondaryButton onClick={onBack}>Zpět</SecondaryButton>
-            </div>
-        </Card>
+        </div>
     );
 };
 
-const ContractStep = ({ rental, vehicle, customer, onBack, onSubmit, setCustomerSignature, setCompanySignature }: any) => {
-    const [showCustomerSign, setShowCustomerSign] = useState(false);
-    const [showCompanySign, setShowCompanySign] = useState(false);
-    const [customerSignData, setCustomerSignData] = useState<string|null>(null);
-    const [companySignData, setCompanySignData] = useState<string|null>(null);
-
-    return (
-        <Card>
-            <h2 className="text-2xl font-bold mb-4">Souhrn a podpis smlouvy</h2>
-            <div className="max-h-[50vh] overflow-y-auto border rounded-md p-4">
-                <ContractView previewRental={rental} vehicle={vehicle} customer={customer} />
-            </div>
-            <div className="grid grid-cols-2 gap-8 mt-8">
-                <div>
-                    <h3 className="font-bold">Podpis nájemce</h3>
-                    {customerSignData ? <img src={customerSignData} className="border rounded-md" /> : (showCustomerSign ? <SignaturePad onSave={(data) => {setCustomerSignature(data); setCustomerSignData(data); setShowCustomerSign(false);}} onCancel={() => setShowCustomerSign(false)} /> : <Button onClick={() => setShowCustomerSign(true)}>Podepsat</Button>)}
-                </div>
-                 <div>
-                    <h3 className="font-bold">Podpis pronajímatele</h3>
-                    {companySignData ? <img src={companySignData} className="border rounded-md" /> : (showCompanySign ? <SignaturePad onSave={(data) => {setCompanySignature(data); setCompanySignData(data); setShowCompanySign(false);}} onCancel={() => setShowCompanySign(false)} /> : <Button onClick={() => setShowCompanySign(true)}>Podepsat</Button>)}
-                </div>
-            </div>
-            <div className="flex justify-between mt-8">
-                <SecondaryButton onClick={onBack}>Zpět</SecondaryButton>
-                <Button onClick={onSubmit} disabled={!customerSignData}>Vytvořit zápůjčku a odeslat smlouvu</Button>
-            </div>
-        </Card>
-    );
-}
-
-const ConfirmationStep = ({ rentalId }: { rentalId?: number }) => {
-    const navigate = useNavigate();
-    return (
-        <Card className="text-center">
-            <h2 className="text-2xl font-bold text-green-600">Hotovo!</h2>
-            <p className="mt-2">Zápůjčka byla úspěšně vytvořena v systému a e-mail se smlouvou byl odeslán.</p>
-            <div className="mt-6 space-x-2">
-                <Button onClick={() => navigate('/rentals')}>Zpět na přehled</Button>
-                {rentalId && <SecondaryButton onClick={() => navigate(`/rentals/contract/${rentalId}`)}>Zobrazit vytvořenou smlouvu</SecondaryButton>}
-            </div>
-        </Card>
-    );
-};
-
-export default CreateRentalWizard;
+export default NewRentalForm;
