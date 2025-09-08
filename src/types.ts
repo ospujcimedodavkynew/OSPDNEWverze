@@ -1,26 +1,33 @@
-export interface VehiclePricing {
-  four_hour?: number;
-  twelve_hour?: number;
-  day?: number;
-  month?: number;
+
+
+export interface ServiceRecord {
+  id: string;
+  date: string;
+  description: string;
+  cost: number;
 }
 
 export interface Vehicle {
-  id: number;
-  created_at: string;
+  id: string;
   brand: string;
   license_plate: string;
   vin: string;
   year: number;
-  pricing: VehiclePricing;
+  serviceHistory?: ServiceRecord[];
+  pricing: {
+    day?: number;
+    four_hour?: number;
+    twelve_hour?: number;
+    month?: number;
+  };
   stk_date: string;
   insurance_info: string;
   vignette_until: string;
+  created_at?: string;
 }
 
 export interface Customer {
-  id: number;
-  created_at: string;
+  id: string;
   first_name: string;
   last_name: string;
   email: string;
@@ -28,12 +35,13 @@ export interface Customer {
   id_card_number: string;
   drivers_license_number: string;
   drivers_license_image_path?: string | null;
+  created_at?: string;
 }
 
 export interface Rental {
-  id: number;
-  vehicle_id: number;
-  customer_id: number;
+  id: string;
+  vehicle_id: string;
+  customer_id: string;
   start_date: string;
   end_date: string;
   total_price: number;
@@ -41,19 +49,20 @@ export interface Rental {
   customer_signature?: string;
   company_signature?: string;
   digital_consent_at?: string | null;
+  created_at?: string;
 }
 
 export interface RentalRequest {
-  id: number;
-  first_name: string;
-  last_name: string;
-  email: string;
-  phone: string;
-  id_card_number: string;
-  drivers_license_number: string;
-  drivers_license_image_base64: string | null;
-  digital_consent_at: string;
-  status: 'pending' | 'approved' | 'rejected';
+    id: string;
+    first_name: string;
+    last_name: string;
+    email: string;
+    phone: string;
+    id_card_number: string;
+    drivers_license_number: string;
+    drivers_license_image_base64: string | null;
+    digital_consent_at: string;
+    status: 'pending' | 'approved' | 'rejected';
 }
 
 export interface ToastMessage {

@@ -1,50 +1,45 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '../supabaseClient';
+import { Vehicle, Rental, Customer, RentalRequest, ToastMessage } from '../types';
 import { Session, User } from '@supabase/supabase-js';
-import { Vehicle, Customer, Rental, RentalRequest, ToastMessage } from '../types';
 
-interface DataContextType {
+// Define the shape of the context data
+interface DataContextProps {
     session: Session | null;
     user: User | null;
-    loading: boolean;
     vehicles: Vehicle[];
-    customers: Customer[];
     rentals: Rental[];
+    customers: Customer[];
     rentalRequests: RentalRequest[];
+    loading: boolean;
     toasts: ToastMessage[];
     login: (email: string, pass: string) => Promise<boolean>;
     logout: () => void;
-    addToast: (message: string, type: 'success' | 'error' | 'info') => void;
-    
-    // Vehicle operations
     addVehicle: (vehicle: Omit<Vehicle, 'id' | 'created_at'>) => Promise<Vehicle | null>;
-    updateVehicle: (id: number, updates: Partial<Vehicle>) => Promise<Vehicle | null>;
-    deleteVehicle: (id: number) => Promise<void>;
-
-    // Customer operations
-    addCustomer: (customer: Omit<Customer, 'id' | 'created_at' | 'drivers_license_image_path'>) => Promise<Customer | null>;
-    updateCustomer: (id: number, updates: Partial<Customer>) => Promise<Customer | null>;
-    deleteCustomer: (id: number) => Promise<void>;
-
-    // Rental operations
-    addRental: (rental: Omit<Rental, 'id'>) => Promise<Rental | null>;
-    updateRental: (id: number, updates: Partial<Rental>) => Promise<boolean>;
-
-    // Rental Request operations
-    addRentalRequest: (request: Omit<RentalRequest, 'id'>) => Promise<void>;
-    updateRentalRequestStatus: (id: number, status: 'approved' | 'rejected') => Promise<boolean>;
+    updateVehicle: (id: string, updates: Partial<Omit<Vehicle, 'id' | 'created_at'>>) => Promise<Vehicle | null>;
+    deleteVehicle: (id: string) => Promise<boolean>;
+    addCustomer: (customer: Omit<Customer, 'id' | 'created_at'>) => Promise<Customer | null>;
+    updateCustomer: (id: string, updates: Partial<Omit<Customer, 'id' | 'created_at'>>) => Promise<Customer | null>;
+    deleteCustomer: (id: string) => Promise<boolean>;
+    addRental: (rental: Omit<Rental, 'id' | 'created_at'>) => Promise<Rental | null>;
+    updateRentalSignatures: (id: string, signatures: { customer_signature?: string, company_signature?: string }) => Promise<Rental | null>;
+    addRentalRequest: (request: Omit<RentalRequest, 'id'>) => Promise<RentalRequest | null>;
+    updateRentalRequestStatus: (id: string, status: 'approved' | 'rejected') => Promise<boolean>;
+    addToast: (message: string, type: 'success' | 'error' | 'info') => void;
 }
 
-const DataContext = createContext<DataContextType | undefined>(undefined);
+// Create the context with a default undefined value
+const DataContext = createContext<DataContextProps | undefined>(undefined);
 
+// Create the provider component
 export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [session, setSession] = useState<Session | null>(null);
     const [user, setUser] = useState<User | null>(null);
-    const [loading, setLoading] = useState(true);
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-    const [customers, setCustomers] = useState<Customer[]>([]);
     const [rentals, setRentals] = useState<Rental[]>([]);
+    const [customers, setCustomers] = useState<Customer[]>([]);
     const [rentalRequests, setRentalRequests] = useState<RentalRequest[]>([]);
+    const [loading, setLoading] = useState(true);
     const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
     useEffect(() => {
@@ -67,194 +62,134 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         };
     }, []);
 
-    const fetchData = async () => {
-        if (!session) return;
-        
-        const [vehiclesRes, customersRes, rentalsRes, rentalRequestsRes] = await Promise.all([
-            supabase.from('vehicles').select('*'),
-            supabase.from('customers').select('*'),
-            supabase.from('rentals').select('*'),
-            supabase.from('rental_requests').select('*'),
-        ]);
-
-        if (vehiclesRes.data) setVehicles(vehiclesRes.data as Vehicle[]);
-        if (customersRes.data) setCustomers(customersRes.data as Customer[]);
-        if (rentalsRes.data) setRentals(rentalsRes.data as Rental[]);
-        if (rentalRequestsRes.data) setRentalRequests(rentalRequestsRes.data as RentalRequest[]);
-    };
-
     useEffect(() => {
         if (session) {
             fetchData();
         }
     }, [session]);
-    
+
+    const fetchData = async () => {
+        setLoading(true);
+        const [
+            { data: vehiclesData, error: vehiclesError },
+            { data: rentalsData, error: rentalsError },
+            { data: customersData, error: customersError },
+            { data: rentalRequestsData, error: rentalRequestsError },
+        ] = await Promise.all([
+            supabase.from('vehicles').select('*'),
+            supabase.from('rentals').select('*'),
+            supabase.from('customers').select('*'),
+            supabase.from('rental_requests').select('*'),
+        ]);
+
+        if (vehiclesError) console.error('Error fetching vehicles:', vehiclesError); else setVehicles(vehiclesData as any || []);
+        if (rentalsError) console.error('Error fetching rentals:', rentalsError); else setRentals(rentalsData as any || []);
+        if (customersError) console.error('Error fetching customers:', customersError); else setCustomers(customersData as any || []);
+        if (rentalRequestsError) console.error('Error fetching rental requests:', rentalRequestsError); else setRentalRequests(rentalRequestsData as any || []);
+        
+        setLoading(false);
+    };
+
+    // --- Auth ---
     const login = async (email: string, pass: string) => {
         const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
         return !error;
     };
+    const logout = () => supabase.auth.signOut();
 
-    const logout = () => {
-        supabase.auth.signOut();
-    };
-
+    // --- Toasts ---
     const addToast = (message: string, type: 'success' | 'error' | 'info') => {
         const id = Date.now();
         setToasts(prev => [...prev, { id, message, type }]);
         setTimeout(() => {
-            setToasts(currentToasts => currentToasts.filter(t => t.id !== id));
-        }, 5000);
+            setToasts(prev => prev.filter(t => t.id !== id));
+        }, 3000);
     };
 
-    // Vehicle operations
+    // --- CRUD Functions ---
+    // Vehicles
     const addVehicle = async (vehicle: Omit<Vehicle, 'id' | 'created_at'>) => {
-        const { data, error } = await supabase.from('vehicles').insert([vehicle]).select();
-        if (error) {
-            addToast(`Chyba při přidávání vozidla: ${error.message}`, 'error');
-            return null;
-        }
-        if (data) {
-            setVehicles(prev => [...prev, data[0]]);
-            return data[0];
-        }
-        return null;
+        const { data, error } = await supabase.from('vehicles').insert([vehicle]).select().single();
+        if (error) { addToast(error.message, 'error'); return null; }
+        if (data) setVehicles(prev => [...prev, data as any]);
+        return data as any;
     };
-
-    const updateVehicle = async (id: number, updates: Partial<Vehicle>) => {
-        const { data, error } = await supabase.from('vehicles').update(updates).eq('id', id).select();
-        if (error) {
-            addToast(`Chyba při aktualizaci vozidla: ${error.message}`, 'error');
-            return null;
-        }
-        if (data) {
-            setVehicles(prev => prev.map(v => (v.id === id ? data[0] : v)));
-            return data[0];
-        }
-        return null;
+    const updateVehicle = async (id: string, updates: Partial<Omit<Vehicle, 'id' | 'created_at'>>) => {
+        const { data, error } = await supabase.from('vehicles').update(updates).eq('id', id).select().single();
+        if (error) { addToast(error.message, 'error'); return null; }
+        if (data) setVehicles(prev => prev.map(v => v.id === id ? data as any : v));
+        return data as any;
     };
-
-    const deleteVehicle = async (id: number) => {
+    const deleteVehicle = async (id: string) => {
         const { error } = await supabase.from('vehicles').delete().eq('id', id);
-        if (error) {
-            addToast(`Chyba při mazání vozidla: ${error.message}`, 'error');
-        } else {
-            setVehicles(prev => prev.filter(v => v.id !== id));
-        }
-    };
-    
-    // Customer operations
-    const addCustomer = async (customer: Omit<Customer, 'id' | 'created_at' | 'drivers_license_image_path'>) => {
-        const { data, error } = await supabase.from('customers').insert([customer]).select();
-        if (error) {
-            addToast(`Chyba při přidávání zákazníka: ${error.message}`, 'error');
-            return null;
-        }
-        if(data) {
-            setCustomers(prev => [...prev, data[0]]);
-            return data[0];
-        }
-        return null;
+        if (error) { addToast(error.message, 'error'); return false; }
+        setVehicles(prev => prev.filter(v => v.id !== id));
+        return true;
     };
 
-    const updateCustomer = async (id: number, updates: Partial<Customer>) => {
-        const { data, error } = await supabase.from('customers').update(updates).eq('id', id).select();
-        if (error) {
-            addToast(`Chyba při aktualizaci zákazníka: ${error.message}`, 'error');
-            return null;
-        }
-        if (data) {
-            setCustomers(prev => prev.map(c => c.id === id ? data[0] : c));
-            return data[0];
-        }
-        return null;
+    // Customers
+    const addCustomer = async (customer: Omit<Customer, 'id' | 'created_at'>) => {
+        const { data, error } = await supabase.from('customers').insert([customer]).select().single();
+        if (error) { addToast(error.message, 'error'); return null; }
+        if (data) setCustomers(prev => [...prev, data as any]);
+        return data as any;
     };
-
-    const deleteCustomer = async (id: number) => {
+    const updateCustomer = async (id: string, updates: Partial<Omit<Customer, 'id' | 'created_at'>>) => {
+        const { data, error } = await supabase.from('customers').update(updates).eq('id', id).select().single();
+        if (error) { addToast(error.message, 'error'); return null; }
+        if (data) setCustomers(prev => prev.map(c => c.id === id ? data as any : c));
+        return data as any;
+    };
+    const deleteCustomer = async (id: string) => {
         const { error } = await supabase.from('customers').delete().eq('id', id);
-        if (error) {
-            addToast(`Chyba při mazání zákazníka: ${error.message}`, 'error');
-        } else {
-            setCustomers(prev => prev.filter(c => c.id !== id));
-        }
+        if (error) { addToast(error.message, 'error'); return false; }
+        setCustomers(prev => prev.filter(c => c.id !== id));
+        return true;
     };
 
-    // Rental operations
-    const addRental = async (rental: Omit<Rental, 'id'>) => {
-        const { data, error } = await supabase.from('rentals').insert([rental]).select();
-        if (error) {
-            addToast(`Chyba při vytváření zápůjčky: ${error.message}`, 'error');
-            return null;
-        }
-        if (data) {
-            setRentals(prev => [...prev, data[0]]);
-            return data[0];
-        }
-        return null;
+    // Rentals
+    const addRental = async (rental: Omit<Rental, 'id' | 'created_at'>) => {
+        const { data, error } = await supabase.from('rentals').insert([rental]).select().single();
+        if (error) { addToast(error.message, 'error'); return null; }
+        if (data) setRentals(prev => [...prev, data as any]);
+        return data as any;
+    };
+    const updateRentalSignatures = async (id: string, signatures: { customer_signature?: string, company_signature?: string }) => {
+        const { data, error } = await supabase.from('rentals').update({ ...signatures, digital_consent_at: new Date().toISOString() }).eq('id', id).select().single();
+        if (error) { addToast(error.message, 'error'); return null; }
+        if (data) setRentals(prev => prev.map(r => r.id === id ? data as any : r));
+        return data as any;
     };
 
-    const updateRental = async (id: number, updates: Partial<Rental>) => {
-        const { data, error } = await supabase.from('rentals').update(updates).eq('id', id).select();
-        if (error) {
-            addToast(`Chyba při aktualizaci zápůjčky: ${error.message}`, 'error');
-            return false;
-        }
-        if (data) {
-            setRentals(prev => prev.map(r => r.id === id ? data[0] : r));
-            return true;
-        }
-        return false;
-    };
-
-    // Rental Request operations
+    // Rental Requests
     const addRentalRequest = async (request: Omit<RentalRequest, 'id'>) => {
-        const { error } = await supabase.from('rental_requests').insert([request]);
-        if (error) {
-            addToast(`Chyba při odeslání žádosti: ${error.message}`, 'error');
-        } else {
-            // No need to update state, it's a public form
-        }
+        const { data, error } = await supabase.from('rental_requests').insert([request]).select().single();
+        if (error) { addToast(error.message, 'error'); return null; }
+        if(data) setRentalRequests(prev => [...prev, data as any]);
+        return data as any;
     };
-    
-    const updateRentalRequestStatus = async (id: number, status: 'approved' | 'rejected') => {
-        const { data, error } = await supabase.from('rental_requests').update({ status }).eq('id', id).select();
-        if (error) {
-            addToast(`Chyba při aktualizaci žádosti: ${error.message}`, 'error');
-            return false;
-        }
-        if (data) {
-            setRentalRequests(prev => prev.map(req => (req.id === id ? data[0] : req)));
-            return true;
-        }
-        return false;
+    const updateRentalRequestStatus = async (id: string, status: 'approved' | 'rejected') => {
+        const { error } = await supabase.from('rental_requests').update({ status }).eq('id', id);
+        if (error) { addToast(error.message, 'error'); return false; }
+        setRentalRequests(prev => prev.map(req => req.id === id ? { ...req, status } : req));
+        return true;
     };
 
     const value = {
-        session,
-        user,
-        loading,
-        vehicles,
-        customers,
-        rentals,
-        rentalRequests,
-        toasts,
-        login,
-        logout,
-        addToast,
-        addVehicle,
-        updateVehicle,
-        deleteVehicle,
-        addCustomer,
-        updateCustomer,
-        deleteCustomer,
-        addRental,
-        updateRental,
-        addRentalRequest,
-        updateRentalRequestStatus
+        session, user, vehicles, rentals, customers, rentalRequests, loading, toasts,
+        login, logout, addVehicle, updateVehicle, deleteVehicle,
+        addCustomer, updateCustomer, deleteCustomer, addRental, updateRentalSignatures,
+        addRentalRequest, updateRentalRequestStatus, addToast,
     };
 
-    return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
+    return (
+        <DataContext.Provider value={value}>
+            {children}
+        </DataContext.Provider>
+    );
 };
 
+// Create a custom hook to use the context
 export const useData = () => {
     const context = useContext(DataContext);
     if (context === undefined) {

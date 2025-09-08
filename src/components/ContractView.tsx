@@ -1,168 +1,128 @@
-import React, { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { Card, Button } from './ui';
 import SignaturePad from './SignaturePad';
 import { Rental, Vehicle, Customer } from '../types';
 
-interface ContractViewProps {
-    // FIX: Changed totalPrice to total_price to match the Rental type.
-    previewRental?: Partial<Rental> & {total_price: number}; // totalPrice is calculated in wizard
-    vehicle?: Vehicle | null;
-    customer?: Customer | null;
-}
-
-const ContractView: React.FC<ContractViewProps> = ({ previewRental, vehicle: previewVehicle, customer: previewCustomer }) => {
-    const { id: paramId } = useParams<{ id: string }>();
-    const { rentals, vehicles, customers, updateRental, addToast } = useData();
-    const [showCustomerSignaturePad, setShowCustomerSignaturePad] = useState(false);
-    const [showCompanySignaturePad, setShowCompanySignaturePad] = useState(false);
-
-    const isPreview = !!previewRental;
-    const rental = isPreview 
-        ? (previewRental as Rental) 
-        : rentals.find(r => r.id === Number(paramId));
+const ContractView: React.FC = () => {
+    const { id } = useParams<{ id: string }>();
+    const navigate = useNavigate();
+    const { rentals, vehicles, customers, updateRentalSignatures, addToast } = useData();
     
-    if (!rental) {
-        return <div>Smlouva nenalezena.</div>;
-    }
+    const [rental, setRental] = useState<Rental | null>(null);
+    const [vehicle, setVehicle] = useState<Vehicle | null>(null);
+    const [customer, setCustomer] = useState<Customer | null>(null);
+    const [isSigningCustomer, setIsSigningCustomer] = useState(false);
+    const [isSigningCompany, setIsSigningCompany] = useState(false);
 
-    const vehicle = isPreview ? previewVehicle : vehicles.find(v => v.id === rental.vehicle_id);
-    const customer = isPreview ? previewCustomer : customers.find(c => c.id === rental.customer_id);
-
-    if (!vehicle || !customer) {
-        return <div>Chybí údaje o vozidle nebo zákazníkovi.</div>;
-    }
-    
-    const handleSaveSignature = async (type: 'customer' | 'company', dataUrl: string) => {
-        if (isPreview || !rental.id) return;
-
-        const updates: Partial<Rental> = {};
-        if (type === 'customer') {
-            updates.customer_signature = dataUrl;
-            if(!rental.digital_consent_at) {
-                 updates.digital_consent_at = new Date().toISOString();
-            }
-        } else {
-            updates.company_signature = dataUrl;
+    useEffect(() => {
+        const currentRental = rentals.find(r => r.id === id);
+        if (currentRental) {
+            setRental(currentRental);
+            setVehicle(vehicles.find(v => v.id === currentRental.vehicle_id) || null);
+            setCustomer(customers.find(c => c.id === currentRental.customer_id) || null);
         }
-        
-        const success = await updateRental(rental.id, updates);
-        if(success) {
-            addToast("Podpis byl uložen.", "success");
+    }, [id, rentals, vehicles, customers]);
+
+    const handleSaveSignature = async (signatureType: 'customer' | 'company', dataUrl: string) => {
+        if (!rental) return;
+
+        const signatures = {
+            customer_signature: signatureType === 'customer' ? dataUrl : rental.customer_signature,
+            company_signature: signatureType === 'company' ? dataUrl : rental.company_signature,
+        };
+
+        const updatedRental = await updateRentalSignatures(rental.id, signatures);
+        if (updatedRental) {
+            setRental(updatedRental);
+            addToast('Podpis byl uložen.', 'success');
         } else {
-            addToast("Podpis se nepodařilo uložit.", "error");
+            addToast('Uložení podpisu se nezdařilo.', 'error');
         }
-        setShowCustomerSignaturePad(false);
-        setShowCompanySignaturePad(false);
+
+        setIsSigningCustomer(false);
+        setIsSigningCompany(false);
     };
+
+    if (!rental || !vehicle || !customer) {
+        return <div className="text-center p-8">Načítání smlouvy...</div>;
+    }
 
     return (
         <div>
-            {!isPreview && <h1 className="text-3xl font-bold mb-6">Smlouva o pronájmu vozidla #{rental.id}</h1>}
-            <Card className={isPreview ? 'border-none shadow-none p-0' : ''}>
-                <div className="prose max-w-none">
-                     <div className="flex justify-between items-center mb-4">
-                        <h2 className="text-2xl !my-0">Smlouva o pronájmu vozidla</h2>
-                        {!isPreview && <span className="font-mono">#{rental.id}</span>}
+            <div className="flex justify-between items-center mb-6">
+                <h1 className="text-3xl font-bold">Smlouva o zápůjčce #{rental.id.substring(0, 8)}</h1>
+                <Button onClick={() => window.print()} variant="secondary">Tisk</Button>
+            </div>
+            
+            <Card className="prose max-w-none">
+                <h2>Smluvní strany</h2>
+                <div className="grid grid-cols-2 gap-8">
+                    <div>
+                        <h3>Půjčovatel</h3>
+                        <p>
+                            <strong>RentalAdmin s.r.o.</strong><br />
+                            Náměstí Svobody 1<br />
+                            602 00 Brno<br />
+                            IČO: 12345678
+                        </p>
                     </div>
-
-                    <hr className="!my-4" />
-
-                    <h3>I. Smluvní strany</h3>
-                    <div className="grid grid-cols-2 gap-4 not-prose text-sm">
-                        <div className="border p-3 rounded-md">
-                            <h4 className="font-bold text-base">Pronajímatel</h4>
-                            <p className="!my-0">
-                                Milan Gula<br/>
-                                Ghegova 17, Brno, Nové Sady<br/>
-                                IČO: 07031653<br/>
-                                Web: pujcimedodavky.cz
-                            </p>
-                        </div>
-                        <div className="border p-3 rounded-md">
-                            <h4 className="font-bold text-base">Nájemce</h4>
-                            <p className="!my-0">
-                                {customer.first_name} {customer.last_name}<br/>
-                                Email: {customer.email}<br/>
-                                Telefon: {customer.phone}<br/>
-                                Číslo OP: {customer.id_card_number}
-                            </p>
-                        </div>
+                    <div>
+                        <h3>Zákazník</h3>
+                        <p>
+                            <strong>{customer.first_name} {customer.last_name}</strong><br />
+                            Email: {customer.email}<br />
+                            Telefon: {customer.phone}<br />
+                            Číslo OP: {customer.id_card_number}
+                        </p>
                     </div>
-
-                    <h3 className="!mt-6">II. Předmět nájmu</h3>
-                    <p>
-                        Pronajímatel přenechává nájemci do dočasného užívání následující motorové vozidlo:
-                    </p>
-                    <ul className="text-sm">
-                        <li><strong>Vozidlo:</strong> {vehicle.brand}</li>
-                        <li><strong>SPZ:</strong> {vehicle.license_plate}</li>
-                        <li><strong>VIN:</strong> {vehicle.vin}</li>
-                        <li><strong>Rok výroby:</strong> {vehicle.year}</li>
-                    </ul>
-
-                     <h3 className="!mt-6">III. Doba nájmu a nájemné</h3>
-                     <p>
-                        Nájem se sjednává na dobu určitou:
-                     </p>
-                     <ul className="text-sm">
-                        <li><strong>Od:</strong> {new Date(rental.start_date).toLocaleString('cs-CZ')}</li>
-                        <li><strong>Do:</strong> {new Date(rental.end_date).toLocaleString('cs-CZ')}</li>
-                        <li><strong>Celková cena nájemného:</strong> {rental.total_price} Kč</li>
-                     </ul>
-
-                     <h3 className="!mt-6">IV. Práva a povinnosti</h3>
-                     <p className="text-sm">Nájemce je povinen užívat vozidlo řádně a v souladu s účelem smlouvy, chránit ho před poškozením a dodržovat dopravní předpisy. Náklady na pohonné hmoty hradí nájemce. V případě nehody je nájemce povinen neprodleně kontaktovat pronajímatele a policii.</p>
-                     
-                     <h3 className="!mt-6">V. Závěrečná ustanovení</h3>
-                     <p className="text-sm">Tato smlouva je vyhotovena ve dvou stejnopisech a nabývá platnosti a účinnosti dnem podpisu oběma smluvními stranami. Smluvní strany prohlašují, že si smlouvu přečetly, s jejím obsahem souhlasí a na důkaz toho připojují své podpisy.</p>
-
-                    {!isPreview && (
-                        <>
-                             <hr className="!my-6" />
-                            <h2>Podpisy</h2>
-                            <div className="grid grid-cols-2 gap-8 not-prose">
-                                <div>
-                                    <h4 className="font-bold text-base">Podpis nájemce</h4>
-                                    {rental.customer_signature ? (
-                                        <img src={rental.customer_signature} alt="Podpis zákazníka" className="border p-2 rounded-md"/>
-                                    ) : (
-                                        <>
-                                            {showCustomerSignaturePad ? (
-                                                <SignaturePad 
-                                                    onSave={(data) => handleSaveSignature('customer', data)} 
-                                                    onCancel={() => setShowCustomerSignaturePad(false)} 
-                                                />
-                                            ) : (
-                                                <Button onClick={() => setShowCustomerSignaturePad(true)}>Podepsat</Button>
-                                            )}
-                                        </>
-                                    )}
-                                    {rental.digital_consent_at && <p className="text-xs mt-2 text-gray-500">Digitálně podepsáno {new Date(rental.digital_consent_at).toLocaleString('cs-CZ')}</p>}
-                                </div>
-                                <div>
-                                     <h4 className="font-bold text-base">Podpis pronajímatele</h4>
-                                    {rental.company_signature ? (
-                                        <img src={rental.company_signature} alt="Podpis pronajímatele" className="border p-2 rounded-md"/>
-                                    ) : (
-                                        <>
-                                            {showCompanySignaturePad ? (
-                                                <SignaturePad 
-                                                    onSave={(data) => handleSaveSignature('company', data)} 
-                                                    onCancel={() => setShowCompanySignaturePad(false)} 
-                                                />
-                                            ) : (
-                                                <Button onClick={() => setShowCompanySignaturePad(true)}>Podepsat</Button>
-                                            )}
-                                        </>
-                                    )}
-                                </div>
-                            </div>
-                        </>
-                    )}
                 </div>
+
+                <h2>Předmět zápůjčky</h2>
+                <p>
+                    <strong>Vozidlo:</strong> {vehicle.brand}<br />
+                    <strong>SPZ:</strong> {vehicle.license_plate}<br />
+                    <strong>VIN:</strong> {vehicle.vin}
+                </p>
+
+                <h2>Doba zápůjčky</h2>
+                <p>
+                    <strong>Od:</strong> {new Date(rental.start_date).toLocaleString()}<br />
+                    <strong>Do:</strong> {new Date(rental.end_date).toLocaleString()}
+                </p>
+
+                <h2>Cena</h2>
+                <p>Celková cena za zápůjčku je <strong>{rental.total_price} Kč</strong>.</p>
+                
+                <h2>Podpisy</h2>
+                <div className="grid grid-cols-2 gap-8 not-prose">
+                    <div>
+                        <h4>Podpis zákazníka</h4>
+                        {rental.customer_signature ? (
+                            <img src={rental.customer_signature} alt="Podpis zákazníka" className="border rounded" />
+                        ) : isSigningCustomer ? (
+                            <SignaturePad onSave={(data) => handleSaveSignature('customer', data)} onCancel={() => setIsSigningCustomer(false)} />
+                        ) : (
+                            <Button onClick={() => setIsSigningCustomer(true)}>Podepsat</Button>
+                        )}
+                    </div>
+                     <div>
+                        <h4>Podpis půjčovatele</h4>
+                        {rental.company_signature ? (
+                            <img src={rental.company_signature} alt="Podpis půjčovatele" className="border rounded" />
+                        ) : isSigningCompany ? (
+                            <SignaturePad onSave={(data) => handleSaveSignature('company', data)} onCancel={() => setIsSigningCompany(false)} />
+                        ) : (
+                            <Button onClick={() => setIsSigningCompany(true)}>Podepsat</Button>
+                        )}
+                    </div>
+                </div>
+                 {rental.digital_consent_at && <p className="text-xs text-gray-500 mt-4">Digitálně odsouhlaseno dne: {new Date(rental.digital_consent_at).toLocaleString()}</p>}
             </Card>
+            <div className="mt-4">
+                 <Button onClick={() => navigate('/rentals')} variant="secondary">Zpět na seznam</Button>
+            </div>
         </div>
     );
 };
